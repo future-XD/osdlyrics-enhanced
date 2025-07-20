@@ -322,8 +322,8 @@ jobs:
           
           ### ✨ Key Features
           - **Word-by-word highlighting** in OSD display mode
-          - **Apple Music Downloader LRC support** with automatic detection
-          - **Enhanced MPD integration** with smart filename matching
+          - **Enhanced LRC Support ( word by word timings in ms instead of line by line )
+          - **Enhanced MPD integration** with smart filename matching  ( to-do )
           - **Backward compatibility** with all standard LRC files
           - **Customizable highlight colors** and animation speeds
           
