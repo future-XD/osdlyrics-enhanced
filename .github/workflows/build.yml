@@ -1,0 +1,54 @@
+name: Continuous Build
+
+on:
+  push:
+    branches: [ master, enhanced-beta ]
+  pull_request:
+    branches: [ master, enhanced-beta ]
+
+jobs:
+  ubuntu-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential autotools-dev automake libtool intltool pkg-config \
+            libgtk2.0-dev python3 python3-gi python3-dbus libsqlite3-dev libcurl4-openssl-dev \
+            libnotify-dev
+      - name: Test build
+        run: |
+          ./autogen.sh
+          ./configure --prefix=/usr
+          make -j$(nproc)
+  arch-build:
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm base-devel git gtk2 python python-gobject python-dbus sqlite curl libnotify intltool pkgconf autoconf automake libtool
+      - name: Test build
+        run: |
+          ./autogen.sh
+          ./configure --prefix=/usr
+          make -j$(nproc)
+  fedora-build:
+    runs-on: ubuntu-latest
+    container: fedora:latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          dnf -y upgrade
+          dnf -y install make automake gcc gcc-c++ kernel-devel intltool pkgconfig gtk2-devel \
+            python3 python3-gobject python3-dbus sqlite-devel libcurl-devel libnotify-devel
+      - name: Test build
+        run: |
+          ./autogen.sh
+          ./configure --prefix=/usr
+          make -j$(nproc)
+
