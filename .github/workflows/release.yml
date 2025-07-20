@@ -17,8 +17,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential autotools-dev automake libtool intltool pkg-config \
-              devscripts debhelper fakeroot libgtk2.0-dev python3 python3-gi python3-dbus libsqlite3-dev \
-              libcurl4-openssl-dev libnotify-dev
+            devscripts debhelper fakeroot ruby ruby-dev libgtk2.0-dev python3 python3-gi python3-dbus \
+            libsqlite3-dev libcurl4-openssl-dev libnotify-dev
+          sudo gem install --no-document fpm
 
       - name: Build
         run: |
@@ -31,9 +32,8 @@ jobs:
           mkdir -p pkg-deb
           make DESTDIR="$PWD/pkg-deb" install
           cd pkg-deb
-          # Basic deb package creation; for production, consider using debhelper or build-deb-action[1]
           fpm -s dir -t deb -n osdlyrics-enhanced -v "${GITHUB_REF_NAME#v}" -C . \
-            --prefix=/ --deb-no-default-config-files=1 --description "OSD Lyrics Enhanced LRC" .
+            --prefix=/ --deb-no-default-config-files=1 --description "OSD Lyrics Enhanced LRC"
         env:
           FPM_VERSION: 1.10.2
 
@@ -50,7 +50,8 @@ jobs:
       - name: Install build dependencies
         run: |
           pacman -Syu --noconfirm
-          pacman -S --noconfirm base-devel git gtk2 python python-gobject python-dbus sqlite curl libnotify intltool pkgconf autoconf automake libtool
+          pacman -S --noconfirm base-devel git gtk2 python python-gobject python-dbus sqlite \
+            curl libnotify intltool pkgconf autoconf automake libtool
 
       - name: Checkout code
         uses: actions/checkout@v4
@@ -61,14 +62,13 @@ jobs:
           ./configure --prefix=/usr
           make -j$(nproc)
 
-      - name: Package (PKG)
+      - name: Package tarball
         run: |
           mkdir -p pkg-arch
           make DESTDIR="$PWD/pkg-arch" install
-          BS_VERSION="${GITHUB_REF_NAME#v}"
           tar -C pkg-arch -czf osdlyrics-enhanced-arch.tar.gz .
 
-      - name: Upload .tar.gz
+      - name: Upload tarball
         uses: actions/upload-artifact@v4
         with:
           name: osdlyrics-enhanced-arch
@@ -81,7 +81,7 @@ jobs:
       - name: Install build dependencies
         run: |
           dnf -y upgrade
-          dnf -y install make automake gcc gcc-c++ kernel-devel intltool pkgconfig gtk2-devel \
+          dnf -y install make automake gcc gcc-c++ kernel-devel intltool pkgconf pkg-config gtk2-devel \
             python3 python3-gobject python3-dbus sqlite-devel libcurl-devel libnotify-devel
 
       - name: Checkout code
@@ -93,14 +93,13 @@ jobs:
           ./configure --prefix=/usr
           make -j$(nproc)
 
-      - name: Package (RPM)
+      - name: Package tarball
         run: |
           mkdir -p pkg-fedora
           make DESTDIR="$PWD/pkg-fedora" install
-          # For production, create a proper SPEC file and use rpmbuild or fpm
           tar -C pkg-fedora -czf osdlyrics-enhanced-fedora.tar.gz .
 
-      - name: Upload .tar.gz
+      - name: Upload tarball
         uses: actions/upload-artifact@v4
         with:
           name: osdlyrics-enhanced-fedora
@@ -130,8 +129,8 @@ jobs:
           mkdir -p AppDir/usr
           make DESTDIR=$PWD/AppDir install
           cp data/osdlyrics-enhanced.desktop AppDir/
-          # Copy icon, fallback if missing
-          find ./data/icons -name osdlyrics-enhanced.png | head -n1 | xargs -I@ cp @ AppDir/.
+          ICON_PATH=$(find ./data/icons -name osdlyrics-enhanced.png | head -n1)
+          [ -n "$ICON_PATH" ] && cp "$ICON_PATH" AppDir/osdlyrics-enhanced.png
 
       - name: Download AppImage tool
         run: |
@@ -147,4 +146,3 @@ jobs:
         with:
           name: osdlyrics-enhanced-appimage
           path: osdlyrics-enhanced-x86_64.AppImage
-
