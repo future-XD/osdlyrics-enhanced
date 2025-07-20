@@ -57,6 +57,8 @@ static const char *OL_CONFIG_DEFAULT_LRC_FILENAME[] = {
   NULL,
 };
 
+
+
 typedef struct _OlConfigStrListValue OlConfigStrListValue;
 struct _OlConfigStrListValue
 {
@@ -106,13 +108,15 @@ static const OlConfigStrListValue config_str_list[] = {
 };
 
 static const OlConfigBoolValue config_bool[] = {
-  {"OSD/locked", TRUE},
-  {"OSD/visible_when_stopped", TRUE},
-  {"OSD/translucent-on-mouse-over", TRUE},
-  {"Download/download-first-lyric", FALSE},
-  {"General/display-mode-osd", TRUE},
-  {"General/display-mode-scroll", TRUE},
-  {"General/notify-music", TRUE},
+    {"General/startup-player", TRUE},
+    {"General/close-to-tray", TRUE},
+    {"OSD/visible", FALSE},
+    {"OSD/locked", TRUE},
+    {"ScrollWindow/visible", FALSE},
+    {"ScrollWindow/locked", TRUE},
+    // ADD these new entries:
+    {"EnhancedLRC/enabled", TRUE},
+    {"EnhancedLRC/word-highlighting", TRUE},
 };
 
 static const OlConfigIntValue config_int[] = {
@@ -129,10 +133,12 @@ static const OlConfigIntValue config_int[] = {
 };
 
 static const OlConfigDoubleValue config_double[] = {
-  {"OSD/lrc-align-0", 0.0, 1.0, 0.0},
-  {"OSD/lrc-align-1", 0.0, 1.0, 1.0},
-  {"ScrollMode/opacity", 0.0, 1.0, 0.9},
-  {"OSD/blur-radius", 0.0, 5.0, 2.0},
+    {"OSD/width", 0.0, 1.0, 0.7},
+    {"ScrollWindow/opacity", 0.2, 1.0, 1.0},
+    {"ScrollWindow/width", 0.0, 1.0, 0.8},
+    // ADD these new entries:
+    {"EnhancedLRC/animation-speed", 0.0, 3.0, 1.0},
+    {"EnhancedLRC/word-fade-duration", 0.0, 2.0, 0.3},
 };
 
 static const OlConfigStringValue config_str[] = {
@@ -149,6 +155,10 @@ static const OlConfigStringValue config_str[] = {
   {"ScrollMode/active-lrc-color", "#E3CF00"},
   {"ScrollMode/inactive-lrc-color", "#FAEBD6"},
   {"ScrollMode/scroll-mode", "always"},
+  {"EnhancedLRC/word-highlight-color", "#FFFF00"},
+  {"EnhancedLRC/animation-style", "smooth"},
 };
+
+
 
 #endif /* _OL_CONFIG_PROPERTY_H_ */

@@ -38,6 +38,7 @@
 #define OL_IS_OSD_WINDOW(obj)               G_TYPE_CHECK_INSTANCE_TYPE (obj, ol_osd_window_get_type ())
 #define OL_OSD_WINDOW_GET_CLASS(obj)        (G_TYPE_INSTANCE_GET_CLASS ((obj), ol_osd_window_get_type (), OlOsdWindowClass))
 #define OL_OSD_WINDOW_MAX_LINE_COUNT        2
+#include "ol_lrc.h"
 
 typedef struct _OlOsdWindow                 OlOsdWindow;
 typedef struct _OlOsdWindowClass            OlOsdWindowClass;
@@ -69,7 +70,22 @@ struct _OlOsdWindow
   guint line_count;
   gboolean translucent_on_mouse_over;
   gpointer priv; /** Private data pointer */
+  
+   /* Enhanced LRC fields - add these */
+  gboolean enhanced_mode;               /* TRUE if enhanced LRC is enabled */
+  OlColor enhanced_word_color;          /* Color for highlighted words */
+  GHashTable *word_timings_cache;       /* Cache for word timing data by line */
+  gint64 current_time_ms;   
 };
+
+void ol_osd_window_set_enhanced_mode (OlOsdWindow *osd, gboolean enabled);
+gboolean ol_osd_window_get_enhanced_mode (OlOsdWindow *osd);
+void ol_osd_window_set_word_timings (OlOsdWindow *osd, gint line_id, GPtrArray *word_timings);
+void ol_osd_window_set_enhanced_word_color (OlOsdWindow *osd, OlColor color);
+void ol_osd_window_set_current_time (OlOsdWindow *osd, gint64 time_ms);
+
+/* Word timing structure */
+
 
 struct _OlOsdWindowClass
 {

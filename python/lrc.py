@@ -19,7 +19,6 @@
 #
 
 import re
-
 import dbus.types
 
 __all__ = (
@@ -30,11 +29,10 @@ __all__ = (
     'parse_lrc',
 )
 
-
 LINE_PATTERN = re.compile(r'(\[[^\[]*?\])')
 TIMESTAMP_PATTERN = re.compile(r'^\[(\d+(:\d+){0,2}(\.\d+)?)\]$')
 ATTR_PATTERN = re.compile(r'^\[([\w\d]+):(.*)\]$')
-
+ENHANCED_WORD_PATTERN = re.compile(r'<(\d+(:\d+){0,2}(\.\d+)?)>([^<]*)')
 
 class AttrToken:
     """
@@ -48,18 +46,17 @@ class AttrToken:
     def __repr__(self):
         return '{%s: %s}' % (self.key, self.value)
 
-
 class StringToken(object):
     """
-    Represents a line of lyric text
+    Represents a line of lyric text, with optional word-level timing
     """
 
-    def __init__(self, text):
+    def __init__(self, text, word_timings=None):
         self.text = text
+        self.word_timings = word_timings or []  # List of (timestamp_ms, word) tuples
 
     def __repr__(self):
         return '"%s"\n' % self.text
-
 
 class TimeToken(object):
     """
@@ -81,6 +78,29 @@ class TimeToken(object):
     def __repr__(self):
         return '[%s]' % self.time
 
+def parse_enhanced_words(text_part):
+    """Parse enhanced LRC word timings from text"""
+    word_timings = []
+    words = []
+    
+    for match in ENHANCED_WORD_PATTERN.finditer(text_part):
+        timestamp_str = match.group(1)
+        word = match.group(4).strip()
+        
+        # Convert timestamp to milliseconds (reuse TimeToken logic)
+        parts = timestamp_str.split(':')
+        parts.reverse()
+        factor = 1000
+        ms = int(float(parts[0]) * factor)
+        for s in parts[1:]:
+            factor = factor * 60
+            ms = ms + factor * int(s)
+        
+        if word:  # Only add non-empty words
+            word_timings.append((ms, word))
+            words.append(word)
+    
+    return word_timings, ' '.join(words)
 
 def tokenize(content):
     """ Split the content of LRC file into tokens
@@ -114,7 +134,17 @@ def tokenize(content):
                     pos = m.end()
             if not has_tag:
                 break
-        tokens.append(StringToken(line[pos:]))
+        
+        # Parse the remaining text part for enhanced word timings
+        text_part = line[pos:]
+        if '<' in text_part and '>' in text_part:
+            # This is enhanced LRC with word-level timing
+            word_timings, clean_text = parse_enhanced_words(text_part)
+            tokens.append(StringToken(clean_text, word_timings))
+        else:
+            # Standard LRC text
+            tokens.append(StringToken(text_part))
+        
         return tokens
 
     lines = content.splitlines()
@@ -122,7 +152,6 @@ def tokenize(content):
     for line in lines:
         tokens.extend(tokenize_line(line))
     return tokens
-
 
 def parse_lrc(content):
     """
@@ -133,7 +162,7 @@ def parse_lrc(content):
 
     Return values: attr, lyrics
     - `attr`: A dict represents attributes in LRC file
-    - `lyrics`: A list of dict with 3 keys: id, timestamp and text.
+    - `lyrics`: A list of dict with 3 keys: id, timestamp, text, and word_timings.
       The list is sorted in ascending order by timestamp. Id increases from 0.
     """
     tokens = tokenize(content)
@@ -147,16 +176,23 @@ def parse_lrc(content):
             timetags.append(token.time)
         else:
             for timestamp in timetags:
-                lyrics.append({'timestamp': dbus.types.Int64(timestamp),
-                               'text': token.text})
+                lyric_entry = {
+                    'timestamp': dbus.types.Int64(timestamp),
+                    'text': token.text
+                }
+                # Add word timings if available (enhanced LRC)
+                if token.word_timings:
+                    lyric_entry['word_timings'] = token.word_timings
+                
+                lyrics.append(lyric_entry)
             timetags = []
+    
     lyrics.sort(key=lambda a: a['timestamp'])
     i = 0
     for lyric in lyrics:
         lyric['id'] = dbus.types.UInt32(i)
         i = i + 1
     return attrs, lyrics
-
 
 def test():
     TEST_CASE1 = \
@@ -169,19 +205,44 @@ def test():
 おわり
 """
 
+    # Test case for enhanced LRC
+    TEST_CASE2 = \
+        """[ti:Test Song][ar:Test Artist]
+[00:03.80]<00:03.80>Like <00:04.15>an <00:04.34>unraveling <00:05.23>thread<00:06.03>
+[00:10.00]Regular lyrics without word timing
+"""
+
     def test_tokenizer():
+        print("=== Testing Standard LRC ===")
         tokens = tokenize(TEST_CASE1)
-        print(tokens)
+        for token in tokens:
+            print(token)
+        
+        print("\n=== Testing Enhanced LRC ===")
+        tokens = tokenize(TEST_CASE2)
+        for token in tokens:
+            print(token)
+            if isinstance(token, StringToken) and token.word_timings:
+                print("  Word timings:", token.word_timings)
 
     def test_parser():
+        print("\n=== Testing Standard LRC Parser ===")
         attr, lyrics = parse_lrc(TEST_CASE1)
-        print(attr)
+        print("Attributes:", attr)
         for line in lyrics:
             print('%s: %s -> %s' % (line['id'], line['timestamp'], line['text']))
+        
+        print("\n=== Testing Enhanced LRC Parser ===")
+        attr, lyrics = parse_lrc(TEST_CASE2)
+        print("Attributes:", attr)
+        for line in lyrics:
+            print('%s: %s -> %s' % (line['id'], line['timestamp'], line['text']))
+            if 'word_timings' in line:
+                print('  Word timings:', line['word_timings'])
 
     test_tokenizer()
     test_parser()
 
-
 if __name__ == '__main__':
     test()
+

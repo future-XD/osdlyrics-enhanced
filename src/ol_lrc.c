@@ -31,11 +31,13 @@ struct _OlLrcIter
   OlLrc *lrc;
 };
 
-struct OlLrcItem
-{
-  int timestamp;
-  char *text;
+struct OlLrcItem {
+    int timestamp;
+    char *text;
+    GPtrArray *word_timings;  /* Array of OlLrcWordTiming for enhanced LRC */
+    gboolean has_enhanced_timing;
 };
+
 
 typedef struct _OlLrcPrivate OlLrcPrivate;
 
@@ -71,6 +73,10 @@ static struct OlLrcItem *ol_lrc_iter_get_item (OlLrcIter *iter);
 static gboolean _save_offset_timeout (OlLrc *lrc);
 
 G_DEFINE_TYPE_WITH_PRIVATE (OlLrc, ol_lrc, G_TYPE_OBJECT);
+
+static void ol_lrc_word_timing_free(OlLrcWordTiming *timing);
+static GPtrArray *_parse_word_timings_from_variant(GVariant *variant);
+
 
 static void
 ol_lrc_class_init (OlLrcClass *klass)
@@ -184,72 +190,71 @@ ol_lrc_set_attributes_from_variant (OlLrc *lrc,
 }
 
 void
-ol_lrc_set_content_from_variant (OlLrc *lrc,
-                                 GVariant *content)
-{
-  ol_assert (OL_IS_LRC (lrc));
-  ol_assert (content != NULL);
-  OlLrcPrivate *priv = OL_LRC_GET_PRIVATE (lrc);
-  g_ptr_array_remove_range (priv->items, 0, priv->items->len);
-  GVariantIter *iter = NULL;
-  g_variant_get (content, "aa{sv}", &iter);
-  GVariantIter *dict_iter = NULL;
-  while (g_variant_iter_loop (iter, "a{sv}", &dict_iter))
-  {
-    gchar *key = NULL;
-    GVariant *value = NULL;
-    if (g_variant_iter_n_children (dict_iter) < 3)
-    {
-      ol_errorf ("The attributes of a lyric line is not enough, expect 3 attributes "
-                 "(id, timestame, text) but there are only %d attributes.\n",
-                 g_variant_iter_n_children (dict_iter));
-      continue;
+ol_lrc_set_content_from_variant (OlLrc *lrc, GVariant *content) {
+    ol_assert (OL_IS_LRC (lrc));
+    ol_assert (content != NULL);
+    OlLrcPrivate *priv = OL_LRC_GET_PRIVATE (lrc);
+    g_ptr_array_remove_range (priv->items, 0, priv->items->len);
+    GVariantIter *iter = NULL;
+    g_variant_get (content, "aa{sv}", &iter);
+    GVariantIter *dict_iter = NULL;
+    
+    while (g_variant_iter_loop (iter, "a{sv}", &dict_iter)) {
+        gchar *key = NULL;
+        GVariant *value = NULL;
+        if (g_variant_iter_n_children (dict_iter) < 3) {
+            ol_errorf ("The attributes of a lyric line is not enough, expect 3 attributes "
+                      "(id, timestamp, text) but there are only %d attributes.\n",
+                      g_variant_iter_n_children (dict_iter));
+            continue;
+        }
+
+        guint id = 0;
+        gint64 timestamp = 0;
+        const gchar *text = NULL;
+        GPtrArray *word_timings = NULL;
+        gboolean has_id = FALSE, has_timestamp = FALSE, has_enhanced = FALSE;
+        
+        while (g_variant_iter_loop (dict_iter, "{sv}", &key, &value)) {
+            if (strcmp (key, "id") == 0) {
+                id = g_variant_get_uint32 (value);
+                has_id = TRUE;
+            }
+            else if (strcmp (key, "timestamp") == 0) {
+                timestamp = g_variant_get_int64 (value);
+                has_timestamp = TRUE;
+            }
+            else if (strcmp (key, "text") == 0) {
+                text = g_variant_get_string (value, NULL);
+            }
+            else if (strcmp (key, "word_timings") == 0) {
+                /* Parse enhanced word timing data */
+                word_timings = _parse_word_timings_from_variant(value);
+                has_enhanced = (word_timings && word_timings->len > 0);
+            }
+            else {
+                ol_errorf ("Unknown line attribute: %s\n", key);
+            }
+        }
+        
+        if (has_id && has_timestamp && text != NULL) {
+            struct OlLrcItem *item = ol_lrc_item_new (timestamp, text);
+            if (has_enhanced) {
+                item->word_timings = word_timings;
+                item->has_enhanced_timing = TRUE;
+            }
+            g_ptr_array_add (priv->items, item);
+            ol_infof ("new lyric item: %d, %d: %s (enhanced: %s)\n", 
+                     (int)id, (int)timestamp, text, has_enhanced ? "yes" : "no");
+        }
     }
-    guint id = 0;
-    gint64 timestamp = 0;
-    const gchar *text = NULL;
-    gboolean has_id = FALSE, has_timestamp = FALSE;
-    while (g_variant_iter_loop (dict_iter, "{sv}", &key, &value))
-    {
-      if (strcmp (key, "id") == 0)
-      {
-        id = g_variant_get_uint32 (value);
-        has_id = TRUE;
-      }
-      else if (strcmp (key, "timestamp") == 0)
-      {
-        timestamp = g_variant_get_int64 (value);
-        has_timestamp = TRUE;
-      }
-      else if (strcmp (key, "text") == 0)
-      {
-        text = g_variant_get_string (value, NULL);
-      }
-      else
-      {
-        ol_errorf ("Unknown line attribute: %s\n", key);
-      }
-    } /* for dict_iter */
-    if (has_id && has_timestamp && text != NULL)
-    {
-      g_ptr_array_add (priv->items, ol_lrc_item_new (timestamp, text));
-      ol_infof ("new lyric item: %d, %d: %s\n", (int)id, (int)timestamp, text);
-    }
-    else
-    {
-      if (!has_id)
-        ol_errorf ("missing id in lyric line\n");
-      if (!has_timestamp)
-        ol_errorf ("missing timestamp in lyric line\n");
-      if (!text)
-        ol_errorf ("missing text in lyric line\n");
-    } /* if */
-  } /* for iter */
-  g_variant_iter_free (iter);
-  /* Ensure there are at least one item */
-  if (priv->items->len == 0)
-    g_ptr_array_add (priv->items, ol_lrc_item_new (0, ""));
+    
+    g_variant_iter_free (iter);
+    /* Ensure there are at least one item */
+    if (priv->items->len == 0)
+        g_ptr_array_add (priv->items, ol_lrc_item_new (0, ""));
 }
+
 
 const char *
 ol_lrc_get_attribute (OlLrc *lrc,
@@ -374,24 +379,28 @@ ol_lrc_get_duration (OlLrc *lrc)
 }
 
 static struct OlLrcItem *
-ol_lrc_item_new (gint64 timestamp, const gchar *text)
-{
-  if (text == NULL)
-    text = "";
-  struct OlLrcItem *item = g_new (struct OlLrcItem, 1);
-  item->timestamp = timestamp;
-  item->text = g_strdup (text);
-  return item;
+ol_lrc_item_new (gint64 timestamp, const gchar *text) {
+    if (text == NULL)
+        text = "";
+    struct OlLrcItem *item = g_new (struct OlLrcItem, 1);
+    item->timestamp = timestamp;
+    item->text = g_strdup (text);
+    item->word_timings = NULL;
+    item->has_enhanced_timing = FALSE;
+    return item;
 }
 
 static void
-ol_lrc_item_free (struct OlLrcItem *item)
-{
-  if (item == NULL)
-    return;
-  g_free (item->text);
-  g_free (item);
+ol_lrc_item_free (struct OlLrcItem *item) {
+    if (item == NULL)
+        return;
+    g_free (item->text);
+    if (item->word_timings) {
+        g_ptr_array_free (item->word_timings, TRUE);
+    }
+    g_free (item);
 }
+
 
 static OlLrcIter *
 ol_lrc_iter_new (OlLrc *lrc, guint index)
@@ -501,6 +510,28 @@ ol_lrc_iter_get_text(OlLrcIter *iter)
   return item->text;
 }
 
+static GPtrArray *
+_parse_word_timings_from_variant(GVariant *variant) {
+    GPtrArray *word_timings = g_ptr_array_new_with_free_func((GDestroyNotify)ol_lrc_word_timing_free);
+    GVariantIter *iter = NULL;
+    
+    if (g_variant_is_of_type(variant, G_VARIANT_TYPE("a(xs)"))) {
+        g_variant_get(variant, "a(xs)", &iter);
+        gint64 timestamp;
+        gchar *word;
+        
+        while (g_variant_iter_loop(iter, "(xs)", &timestamp, &word)) {
+            OlLrcWordTiming *timing = g_new(OlLrcWordTiming, 1);
+            timing->timestamp_ms = timestamp;
+            timing->word = g_strdup(word);
+            g_ptr_array_add(word_timings, timing);
+        }
+        g_variant_iter_free(iter);
+    }
+    
+    return word_timings;
+}
+
 gboolean
 ol_lrc_iter_is_valid (OlLrcIter *iter)
 {
@@ -531,6 +562,43 @@ ol_lrc_iter_get_duration (OlLrcIter *iter)
       return duration - timestamp;
   }
 }
+
+gboolean 
+ol_lrc_has_enhanced_timing(OlLrc *lrc) {
+    ol_assert_ret (OL_IS_LRC (lrc), FALSE);
+    OlLrcPrivate *priv = OL_LRC_GET_PRIVATE (lrc);
+    
+    for (guint i = 0; i < priv->items->len; i++) {
+        struct OlLrcItem *item = g_ptr_array_index(priv->items, i);
+        if (item->has_enhanced_timing) {
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+GPtrArray *
+ol_lrc_iter_get_word_timings(OlLrcIter *iter) {
+    struct OlLrcItem *item = ol_lrc_iter_get_item(iter);
+    return item ? item->word_timings : NULL;
+}
+
+gboolean 
+ol_lrc_iter_has_word_timing(OlLrcIter *iter) {
+    struct OlLrcItem *item = ol_lrc_iter_get_item(iter);
+    return item ? item->has_enhanced_timing : FALSE;
+}
+
+static void 
+ol_lrc_word_timing_free(OlLrcWordTiming *timing) {
+    if (timing) {
+        g_free(timing->word);
+        g_free(timing);
+    }
+}
+
+
+
 
 gdouble
 ol_lrc_iter_compute_percentage (OlLrcIter *iter,

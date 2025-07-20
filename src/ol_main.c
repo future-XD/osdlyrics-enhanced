@@ -353,19 +353,28 @@ _cancel_source_task (void)
   }
 }
 
-static void
-_change_lrc (void)
-{
-  _cancel_source_task ();
-  if (current_lrc)
-    g_object_unref (current_lrc);
-  current_lrc = ol_lyrics_get_current_lyrics (lyrics_proxy);
-  CALL_DISPLAY_MODULES (ol_display_module_set_lrc, current_lrc);
-  _update_position ();
-  if (current_lrc == NULL &&
-      !ol_is_string_empty (ol_metadata_get_title (current_metadata)))
-    ol_app_download_lyric (current_metadata);
+// In _change_lrc() function - add enhanced LRC detection
+static void _change_lrc(void) {
+    _cancel_source_task();
+    if (current_lrc) g_object_unref(current_lrc);
+    
+    current_lrc = ol_lyrics_get_current_lyrics(lyrics_proxy);
+    
+    // NEW: Check if LRC has enhanced word timing
+    if (current_lrc) {
+        gboolean has_enhanced = ol_lrc_has_enhanced_timing(current_lrc);
+        ol_debugf("LRC loaded with enhanced timing: %s\n", 
+                 has_enhanced ? "YES" : "NO");
+    }
+    
+    CALL_DISPLAY_MODULES(ol_display_module_set_lrc, current_lrc);
+    _update_position();
+    
+    if (current_lrc == NULL && 
+        !ol_is_string_empty(ol_metadata_get_title(current_metadata)))
+        ol_app_download_lyric(current_metadata);
 }
+
 
 static void
 _status_changed_cb (void)

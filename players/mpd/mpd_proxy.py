@@ -22,6 +22,7 @@
 """
 import logging
 import os
+import re
 import select
 import sys
 
@@ -44,7 +45,7 @@ from osdlyrics.utils import cmd_exists
 
 PLAYER_NAME = 'Mpd'
 DEFAULT_HOST = 'localhost'
-DEFAULT_PORT = 6600
+DEFAULT_PORT = 6700
 
 
 class NoConnectionError(Exception):
@@ -367,15 +368,61 @@ class MpdPlayer(BasePlayer):
             getattr(self, change + '_changed')()
 
     def _handle_currentsong(self, metadata):
+        """
+        Handle current song metadata from MPD with enhanced filename processing
+        Prioritizes exact filename match (01. song.lrc) with fallback to clean match (song.lrc)
+        """
         logging.debug('currentsong: %s', metadata)
         args = {}
+        
+        # Extract standard metadata fields
         for key in ('title', 'artist', 'album'):
             if key in metadata:
                 args[key] = metadata[key]
+        
         if 'time' in metadata:
             args['length'] = int(metadata['time']) * 1000
+        
         if 'track' in metadata:
             args['tracknum'] = int(metadata['track'].split('/')[0])
+        
+        # Enhanced filename/location processing for LRC matching priority
+        if 'file' in metadata:
+            # Store the full file path from MPD (e.g., "Artist/Album/01. song.m4a")
+            args['location'] = metadata['file']
+            
+            # Extract just the filename from the path
+            filename = os.path.basename(metadata['file'])
+            
+            # Store the complete filename with extension (e.g., "01. song.m4a")
+            args['filename'] = filename
+            
+            # Get filename without extension (e.g., "01. song")
+            filename_stem = os.path.splitext(filename)[0]
+            args['filename_stem'] = filename_stem
+            
+            # Create clean version without track numbers for fallback matching
+            clean_title = re.sub(r'^\d+[\s\.\-_]*', '', filename_stem).strip()
+            args['clean_title'] = clean_title if clean_title else filename_stem
+            
+            # For LRC matching priority:
+            # Primary: Use filename_stem ("01. song") to find "01. song.lrc"
+            # Fallback: Use clean_title ("song") to find "song.lrc"
+            args['lrc_primary_match'] = filename_stem      # "01. song"
+            args['lrc_fallback_match'] = args['clean_title']  # "song"
+            
+            # Use clean title for display if no title tag exists
+            if 'title' not in args or not args['title']:
+                args['title'] = args['clean_title']
+                logging.info("No title tag found, using clean filename: %s", args['title'])
+            
+            logging.debug("Enhanced file info:")
+            logging.debug("  Location: %s", args['location'])
+            logging.debug("  Filename: %s", filename)
+            logging.debug("  Primary LRC match: %s", args['lrc_primary_match'])
+            logging.debug("  Fallback LRC match: %s", args['lrc_fallback_match'])
+            logging.debug("  Display title: %s", args['title'])
+        
         self._metadata = Metadata(**args)
 
     @staticmethod
@@ -481,3 +528,4 @@ class MpdPlayer(BasePlayer):
 if __name__ == '__main__':
     proxy = MpdProxy()
     proxy.run()
+

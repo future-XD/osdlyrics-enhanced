@@ -73,6 +73,27 @@ struct _OlLrcIter;
 OlLrc *ol_lrc_new (OlLyrics *lyric_proxy,
                    const gchar *uri);
 
+typedef struct {
+    gint64 timestamp_ms;
+    gchar *word;
+} OlLrcWordTiming;
+
+// Enhance OlLrcItem structure
+struct OlLrcItem {
+    int timestamp;
+    char *text;
+    GPtrArray *word_timings;  /* Array of OlLrcWordTiming for enhanced LRC */
+    gboolean has_enhanced_timing;
+};
+
+
+
+gboolean ol_lrc_has_enhanced_timing(OlLrc *lrc);
+GPtrArray *ol_lrc_iter_get_word_timings(OlLrcIter *iter);
+gboolean ol_lrc_item_has_word_timing(OlLrcIter *iter);
+gint64 ol_lrc_get_word_timestamp_at_position(OlLrcIter *iter, gint word_index);
+
+
 /**
  * Sets the LRC attributes from GVariant
  *

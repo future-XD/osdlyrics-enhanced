@@ -24,8 +24,9 @@ static void ol_lyrics_g_signal (GDBusProxy *proxy,
                                 const gchar *sender_name,
                                 const gchar *signal_name,
                                 GVariant *parameters);
-static OlLrc *ol_lyrics_get_lrc_from_variant (OlLyrics *proxy,
-                                              GVariant *variant);
+//static OlLrc *ol_lyrics_get_lrc_from_variant (OlLyrics *proxy,
+  //                                            GVariant *variant);
+static OlLrc *ol_lyrics_get_lrc_from_variant (OlLyrics *proxy, GVariant *variant, gboolean *is_enhanced);
 
 G_DEFINE_TYPE_WITH_PRIVATE (OlLyrics, ol_lyrics, G_TYPE_DBUS_PROXY);
 
@@ -136,25 +137,34 @@ ol_lyrics_proxy_new_finish (GAsyncResult *res,
     return NULL;
 }
 
+// Update ol_lyrics_get_lrc_from_variant to handle enhanced flag
 static OlLrc *
-ol_lyrics_get_lrc_from_variant (OlLyrics *proxy, GVariant *variant)
-{
-  OlLrc *lrc = NULL;
-  gboolean found;
-  gchar *uri;
-  GVariant *metadata, *content;
-  g_variant_get (variant, "(bs@a{ss}@aa{sv})", &found, &uri, &metadata, &content);
-  if (found)
-  {
-    lrc = ol_lrc_new (proxy, uri);
-    ol_lrc_set_attributes_from_variant (lrc, metadata);
-    ol_lrc_set_content_from_variant (lrc, content);
-  }
-  g_free (uri);
-  g_variant_unref (content);
-  g_variant_unref (metadata);
-  return lrc;
+ol_lyrics_get_lrc_from_variant (OlLyrics *proxy, GVariant *variant, 
+                               gboolean *is_enhanced) {
+    OlLrc *lrc = NULL;
+    gboolean found, enhanced_flag;
+    gchar *uri;
+    GVariant *metadata, *content;
+    
+    // Updated to handle new signature with enhanced flag
+    g_variant_get (variant, "(bs@a{ss}@aa{sv}b)", 
+                  &found, &uri, &metadata, &content, &enhanced_flag);
+    
+    if (found) {
+        lrc = ol_lrc_new (proxy, uri);
+        ol_lrc_set_attributes_from_variant (lrc, metadata);
+        ol_lrc_set_content_from_variant (lrc, content);
+        
+        // Set enhanced mode flag
+        if (is_enhanced) *is_enhanced = enhanced_flag;
+    }
+    
+    g_free (uri);
+    g_variant_unref (content);
+    g_variant_unref (metadata);
+    return lrc;
 }
+
 
 OlLrc *
 ol_lyrics_get_current_lyrics (OlLyrics *proxy)
@@ -171,7 +181,9 @@ ol_lyrics_get_current_lyrics (OlLyrics *proxy)
                                           &error);
   if (ret)
   {
-    lrc = ol_lyrics_get_lrc_from_variant (proxy, ret);
+    //lrc = ol_lyrics_get_lrc_from_variant (proxy, ret);
+    gboolean is_enhanced = FALSE;
+    lrc = ol_lyrics_get_lrc_from_variant (proxy, ret, &is_enhanced);
     g_variant_unref (ret);
   }
   else
@@ -200,7 +212,9 @@ ol_lyrics_get_lyrics (OlLyrics *proxy,
                                           &error);
   if (ret)
   {
-    lrc = ol_lyrics_get_lrc_from_variant (proxy, ret);
+    //lrc = ol_lyrics_get_lrc_from_variant (proxy, ret);
+    gboolean is_enhanced = FALSE;
+    lrc = ol_lyrics_get_lrc_from_variant (proxy, ret, &is_enhanced);
     g_variant_unref (ret);
   }
   else

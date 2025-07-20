@@ -30,7 +30,17 @@ ol_hide_accel (gpointer userdata)
 {
 }
   
+static void
+_ol_osd_switch_display_wrapper (char *keystring, gpointer user_data)
+{
+  ol_osd_switch_display ();
+}
 
+static void
+_ol_osd_lock_unlock_wrapper (char *keystring, gpointer user_data)
+{
+  ol_osd_lock_unlock ();
+}
 void
 ol_keybinding_init ()
 {
@@ -51,8 +61,10 @@ ol_keybinding_init ()
   gtk_accel_group_connect_by_path (accel,
                                    "<OSD Lyrics>/Switch OSD",
                                    hide_closure);
-  ol_keybinder_bind ("<Ctrl><Shift>H", ol_osd_switch_display, NULL);
-  ol_keybinder_bind ("<Ctrl><Shift>L", ol_osd_lock_unlock, NULL);
+  /*ol_keybinder_bind ("<Ctrl><Shift>H", ol_osd_switch_display, NULL);
+  ol_keybinder_bind ("<Ctrl><Shift>L", ol_osd_lock_unlock, NULL); */
+  ol_keybinder_bind ("<Ctrl><Shift>H", _ol_osd_switch_display_wrapper, NULL);
+  ol_keybinder_bind ("<Ctrl><Shift>L", _ol_osd_lock_unlock_wrapper, NULL);
 }
 
 GtkAccelGroup*

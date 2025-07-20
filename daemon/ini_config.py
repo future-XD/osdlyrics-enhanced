@@ -19,25 +19,20 @@
 #
 
 import configparser
-
 import dbus
 import dbus.service
 from gi.repository import GLib
-
 from osdlyrics.app import App
 from osdlyrics.consts import CONFIG_BUS_NAME, CONFIG_OBJECT_PATH
 import osdlyrics.errors
 import osdlyrics.utils
 
-
 class MalformedKeyError(osdlyrics.errors.BaseError):
     pass
-
 
 class ValueNotExistError(osdlyrics.errors.BaseError):
     def __init__(self, key=''):
         super().__init__('Value of key %s does not exist' % key)
-
 
 class IniConfig(dbus.service.Object):
     """ Implement org.osdlyrics.Config
@@ -71,8 +66,8 @@ class IniConfig(dbus.service.Object):
         return parts[0], parts[1]
 
     @dbus.service.method(dbus_interface=CONFIG_BUS_NAME,
-                         in_signature='s',
-                         out_signature='b')
+                        in_signature='s',
+                        out_signature='b')
     def GetBool(self, key):
         section, name = self._split_key(key)
         try:
@@ -81,8 +76,8 @@ class IniConfig(dbus.service.Object):
             raise ValueNotExistError(key)
 
     @dbus.service.method(dbus_interface=CONFIG_BUS_NAME,
-                         in_signature='s',
-                         out_signature='i')
+                        in_signature='s',
+                        out_signature='i')
     def GetInt(self, key):
         section, name = self._split_key(key)
         try:
@@ -91,8 +86,8 @@ class IniConfig(dbus.service.Object):
             raise ValueNotExistError(key)
 
     @dbus.service.method(dbus_interface=CONFIG_BUS_NAME,
-                         in_signature='s',
-                         out_signature='d')
+                        in_signature='s',
+                        out_signature='d')
     def GetDouble(self, key):
         section, name = self._split_key(key)
         try:
@@ -101,8 +96,8 @@ class IniConfig(dbus.service.Object):
             raise ValueNotExistError(key)
 
     @dbus.service.method(dbus_interface=CONFIG_BUS_NAME,
-                         in_signature='s',
-                         out_signature='s')
+                        in_signature='s',
+                        out_signature='s')
     def GetString(self, key):
         section, name = self._split_key(key)
         try:
@@ -111,8 +106,8 @@ class IniConfig(dbus.service.Object):
             raise ValueNotExistError(key)
 
     @dbus.service.method(dbus_interface=CONFIG_BUS_NAME,
-                         in_signature='s',
-                         out_signature='as')
+                        in_signature='s',
+                        out_signature='as')
     def GetStringList(self, key):
         value = self.GetString(key)
         try:
@@ -129,38 +124,38 @@ class IniConfig(dbus.service.Object):
             self._schedule_signal()
 
     @dbus.service.method(dbus_interface=CONFIG_BUS_NAME,
-                         in_signature='sb',
-                         out_signature='')
+                        in_signature='sb',
+                        out_signature='')
     def SetBool(self, key, value):
         self._set_value(key, 'true' if value else 'false')
 
     @dbus.service.method(dbus_interface=CONFIG_BUS_NAME,
-                         in_signature='si',
-                         out_signature='')
+                        in_signature='si',
+                        out_signature='')
     def SetInt(self, key, value):
         self._set_value(key, value)
 
     @dbus.service.method(dbus_interface=CONFIG_BUS_NAME,
-                         in_signature='sd',
-                         out_signature='')
+                        in_signature='sd',
+                        out_signature='')
     def SetDouble(self, key, value):
         self._set_value(key, value)
 
     @dbus.service.method(dbus_interface=CONFIG_BUS_NAME,
-                         in_signature='ss',
-                         out_signature='')
+                        in_signature='ss',
+                        out_signature='')
     def SetString(self, key, value):
         self._set_value(key, value)
 
     @dbus.service.method(dbus_interface=CONFIG_BUS_NAME,
-                         in_signature='sas',
-                         out_signature='')
+                        in_signature='sas',
+                        out_signature='')
     def SetStringList(self, key, value):
         self._set_value(key, join(value))
 
     @dbus.service.method(dbus_interface=CONFIG_BUS_NAME,
-                         in_signature='a{sv}',
-                         out_signature='')
+                        in_signature='a{sv}',
+                        out_signature='')
     def SetDefaultValues(self, values):
         for k, v in values.items():
             if isinstance(v, list):
@@ -170,7 +165,7 @@ class IniConfig(dbus.service.Object):
     def _schedule_save(self, filename=None):
         if self._save_timer is None:
             self._save_timer = GLib.timeout_add(1000,
-                                                lambda: self.save(filename))
+                                              lambda: self.save(filename))
 
     def save(self, filename=None):
         if filename is None:
@@ -184,7 +179,7 @@ class IniConfig(dbus.service.Object):
     def _schedule_signal(self):
         if self._signal_timer is None:
             self._signal_timer = GLib.timeout_add(500,
-                                                  lambda: self.emit_change())
+                                                lambda: self.emit_change())
 
     def emit_change(self):
         if self._signal_timer is not None:
@@ -195,10 +190,9 @@ class IniConfig(dbus.service.Object):
         self._changed_signals = {}
 
     @dbus.service.signal(dbus_interface=CONFIG_BUS_NAME,
-                         signature='as')
+                        signature='as')
     def ValueChanged(self, changed):
         pass
-
 
 def split(value, sep=';'):
     r"""
@@ -238,10 +232,9 @@ def split(value, sep=';'):
             if tag == '\\' or tag == sep:
                 item.append(value[start:curr])
                 start = curr + 1
-                curr = start
+            curr = start
         curr = curr + 1
     return ret
-
 
 def join(values, sep=';'):
     r"""
@@ -265,20 +258,17 @@ def join(values, sep=';'):
         result.append(item.replace('\\', '\\\\').replace(sep, '\\;'))
     return sep.join(result) + sep
 
-
 def test():
     import doctest
     doctest.testmod()
-
 
 def run():
     app = App('Config')
     if len(sys.argv) > 1:
         ini_conf = IniConfig(app.connection, sys.argv[1])
     else:
-        ini_conf = IniConfig(app.connection)  # noqa: F841
+        ini_conf = IniConfig(app.connection) # noqa: F841
     app.run()
-
 
 if __name__ == '__main__':
     import sys
@@ -286,3 +276,4 @@ if __name__ == '__main__':
         test()
     else:
         run()
+

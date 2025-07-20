@@ -82,8 +82,8 @@ static void _update_metadata (OlOsdModule *module);
 static void _update_status (OlOsdModule *module);
 static gboolean _advance_to_nonempty_lyric (OlLrcIter *iter);
 
-static void ol_osd_module_set_played_time (struct OlDisplayModule *module,
-                                           guint64 played_time);
+//static void ol_osd_module_set_played_time (struct OlDisplayModule *module,
+  //                                         guint64 played_time);
 static void ol_osd_module_set_lrc (struct OlDisplayModule *module,
                                    OlLrc *lrc_file);
 static void ol_osd_module_set_message (struct OlDisplayModule *module,
@@ -174,6 +174,10 @@ static void _outline_changed_cb (OlConfigProxy *config,
 static void _blur_changed_cb (OlConfigProxy *config,
                               const char *key,
                               OlOsdModule *osd);
+
+// Add this declaration near the top of ol_osd_module.c with other static function declarations
+static void _process_enhanced_lrc_data(OlOsdModule *priv, OlLrc *lrc);
+                              
 
 static struct _ConfigMapping _config_mapping[] = {
   { "OSD/visible_when_stopped", _visible_changed_cb },
@@ -647,58 +651,7 @@ _update_status (OlOsdModule *module)
     ol_osd_toolbar_set_status (module->toolbar, status);
 }
 
-static void
-ol_osd_module_set_played_time (struct OlDisplayModule *module,
-                               guint64 played_time)
-{
-  ol_assert (module != NULL);
-  OlOsdModule *priv = ol_display_module_get_data (module);
-  ol_assert (priv != NULL);
-  if (priv->lrc != NULL && priv->window != NULL)
-  {
-    OlLrcIter *iter = ol_lrc_iter_from_timestamp (priv->lrc,
-                                                  played_time);
-    if (_advance_to_nonempty_lyric (iter))
-    {
-      gint id = ol_lrc_iter_get_id (iter);
-      if (id != priv->lrc_id)
-      {
-        if (id == priv->lrc_next_id)
-        {
-          /* advance to the next line */
-          ol_osd_window_set_percentage (priv->window, priv->current_line, 1.0);
-          priv->current_line = 1 - priv->current_line;
-          priv->lrc_id = priv->lrc_next_id;
-          priv->lrc_next_id = -1;
-          ol_osd_window_set_current_line (priv->window, priv->current_line);
-        }
-        else
-        {
-          /* The user seeks the position or there is only 1 line in OSD window.
-             Reset the lyrics. */
-          priv->lrc_id = id;
-          priv->current_line = 0;
-          ol_osd_window_set_current_line (priv->window, 0);
-          ol_osd_window_set_lyric (priv->window, priv->current_line,
-                                   ol_lrc_iter_get_text (iter));
-          ol_osd_module_update_next_lyric (priv, iter);
-        }
-      }
-      gdouble percentage = ol_lrc_iter_compute_percentage (iter, played_time);
-      ol_osd_window_set_current_percentage (priv->window, percentage);
-      if (percentage > 0.5 && priv->lrc_next_id == -1)
-        ol_osd_module_update_next_lyric (priv, iter);
-    }
-    else if (priv->lrc_id != -1 || priv->force_refresh_on_set_played_time)
-    {
-      hide_lyrics (priv);
-      reset_lyrics_state (priv);
-    }
-    ol_lrc_iter_free (iter);
 
-    priv->force_refresh_on_set_played_time = FALSE;
-  }
-}
 
 static gboolean
 _advance_to_nonempty_lyric (OlLrcIter *iter)
@@ -718,8 +671,10 @@ ol_osd_module_set_lrc (struct OlDisplayModule *module, OlLrc *lrc_file)
   ol_assert (module != NULL);
   OlOsdModule *priv = ol_display_module_get_data (module);
   ol_assert (priv != NULL);
+
   if (priv->lrc)
     g_object_unref (priv->lrc);
+
   if (lrc_file)
     g_object_ref (lrc_file);
 
@@ -738,9 +693,114 @@ ol_osd_module_set_lrc (struct OlDisplayModule *module, OlLrc *lrc_file)
     priv->force_refresh_on_set_played_time = TRUE;
   }
 
+  /* Enhanced LRC: Check if LRC contains word-level timing data */
+  if (lrc_file != NULL)
+  {
+    gboolean has_enhanced_timing = ol_lrc_has_enhanced_timing(lrc_file);
+    ol_osd_window_set_enhanced_mode(priv->window, has_enhanced_timing);
+    
+    if (has_enhanced_timing)
+    {
+      ol_debugf("Enhanced LRC detected with word-level timing\n");
+      /* Process word timing data for each line */
+      _process_enhanced_lrc_data(priv, lrc_file);
+    }
+  }
+  else
+  {
+    ol_osd_window_set_enhanced_mode(priv->window, FALSE);
+  }
+
   priv->lrc = lrc_file;
   reset_lyrics_state (priv);
 }
+
+/* Helper function to process enhanced LRC data */
+static void 
+_process_enhanced_lrc_data(OlOsdModule *priv, OlLrc *lrc)
+{
+  OlLrcIter *iter = ol_lrc_iter_from_id (lrc, 0);
+  gint line_id = 0;
+  
+  while (ol_lrc_iter_is_valid(iter))
+  {
+    /* Extract word timing data for this line if available */
+    GPtrArray *word_timings = ol_lrc_iter_get_word_timings(iter);
+    if (word_timings && word_timings->len > 0)
+    {
+      ol_osd_window_set_word_timings(priv->window, line_id, word_timings);
+    }
+    
+    ol_lrc_iter_next(iter);
+    line_id++;
+  }
+  
+  ol_lrc_iter_free (iter);
+}
+
+static void
+ol_osd_module_set_played_time (struct OlDisplayModule *module, guint64 played_time)
+{
+  ol_assert (module != NULL);
+  OlOsdModule *priv = ol_display_module_get_data (module);
+  ol_assert (priv != NULL);
+
+  if (priv->lrc != NULL && priv->window != NULL)
+  {
+    OlLrcIter *iter = ol_lrc_iter_from_timestamp (priv->lrc, played_time);
+    
+    if (_advance_to_nonempty_lyric (iter))
+    {
+      gint id = ol_lrc_iter_get_id (iter);
+      
+      if (id != priv->lrc_id)
+      {
+        if (id == priv->lrc_next_id)
+        {
+          /* advance to the next line */
+          ol_osd_window_set_percentage (priv->window, priv->current_line, 1.0);
+          priv->current_line = 1 - priv->current_line;
+          priv->lrc_id = priv->lrc_next_id;
+          priv->lrc_next_id = -1;
+          ol_osd_window_set_current_line (priv->window, priv->current_line);
+        }
+        else
+        {
+          /* The user seeks the position or there is only 1 line in OSD window.
+             Reset the lyrics. */
+          priv->lrc_id = id;
+          priv->current_line = 0;
+          ol_osd_window_set_current_line (priv->window, 0);
+          ol_osd_window_set_lyric (priv->window, priv->current_line,
+                                  ol_lrc_iter_get_text (iter));
+          ol_osd_module_update_next_lyric (priv, iter);
+        }
+      }
+
+      gdouble percentage = ol_lrc_iter_compute_percentage (iter, played_time);
+      ol_osd_window_set_current_percentage (priv->window, percentage);
+      
+      /* Enhanced LRC: Update current time for word highlighting */
+      if (ol_osd_window_get_enhanced_mode(priv->window))
+      {
+        ol_osd_window_set_current_time(priv->window, played_time / 1000); /* Convert to milliseconds */
+      }
+      
+      if (percentage > 0.5 && priv->lrc_next_id == -1)
+        ol_osd_module_update_next_lyric (priv, iter);
+    }
+    else if (priv->lrc_id != -1 || priv->force_refresh_on_set_played_time)
+    {
+      hide_lyrics (priv);
+      reset_lyrics_state (priv);
+    }
+
+    ol_lrc_iter_free (iter);
+  }
+  
+  priv->force_refresh_on_set_played_time = FALSE;
+}
+
 
 static void
 ol_osd_module_set_message (struct OlDisplayModule *module,

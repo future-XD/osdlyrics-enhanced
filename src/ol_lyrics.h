@@ -78,6 +78,16 @@ OlLyrics *ol_lyrics_proxy_new_finish (GAsyncResult *res,
  */
 OlLrc *ol_lyrics_get_current_lyrics (OlLyrics *proxy);
 
+
+// Update function signatures to include enhanced LRC flag
+OlLrc *ol_lyrics_get_current_lyrics_enhanced (OlLyrics *proxy, 
+                                             gboolean *is_enhanced);
+
+OlLrc *ol_lyrics_get_lyrics_enhanced (OlLyrics *proxy,
+                                     OlMetadata *metadata,
+                                     gboolean *is_enhanced);
+
+
 /**
  * Gets the lyrics assigned to the given metadata
  *

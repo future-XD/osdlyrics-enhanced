@@ -31,6 +31,7 @@ enum {
   PROP_LOCKED,
 };
 
+
 static const OlColor DEFAULT_INACTIVE_COLORS[OL_LINEAR_COLOR_COUNT]= {
   {0.6, 1.0, 1.0},
   {0.0, 0.0, 1.0},
@@ -87,6 +88,10 @@ struct __OlOsdWindowPrivate
   double blur_radius;
   enum OlOsdWindowMode mode;
   enum DragState drag_state;
+  gboolean enhanced_mode;              /* TRUE if enhanced LRC is enabled */
+  OlColor enhanced_word_color;         /* Color for highlighted words */
+  GHashTable *word_timings_cache;      /* Cache for word timing data by line */
+  gint64 current_time_ms; 
 };
 
 struct OsdLrc
@@ -183,6 +188,19 @@ static void _paint_rect (cairo_t *cr, GdkPixbuf *source,
 static gboolean _point_in_rect (int x, int y, GdkRectangle *rect);
 static void ol_osd_window_queue_resize (OlOsdWindow *osd);
 
+/* Static function declarations */
+static void _paint_enhanced_line_with_words(OlOsdWindow *osd, cairo_t *cr, int line, 
+                                           GPtrArray *word_timings, double alpha);
+
+static void
+ol_lrc_word_timing_free (OlLrcWordTiming *timing)
+{
+  if (timing != NULL)
+  {
+    g_free (timing->word);
+    g_free (timing);
+  }
+}
 static void
 _paint_rect (cairo_t *cr, GdkPixbuf *source,
              double src_x, double src_y,
@@ -580,6 +598,8 @@ ol_osd_window_paint (OlOsdWindow *osd)
   cairo_destroy (cr);
 }
 
+
+
 static gboolean
 ol_osd_window_enter_notify (GtkWidget *widget, GdkEventCrossing *event)
 {
@@ -809,6 +829,56 @@ ol_osd_window_set_width (OlOsdWindow *osd, gint width)
   gtk_widget_queue_draw (GTK_WIDGET (osd));
 }
 
+void 
+ol_osd_window_set_enhanced_mode (OlOsdWindow *osd, gboolean enabled)
+{
+  ol_assert (OL_IS_OSD_WINDOW (osd));
+  OlOsdWindowPrivate *priv = OL_OSD_WINDOW_GET_PRIVATE (osd);
+  priv->enhanced_mode = enabled;
+  gtk_widget_queue_draw (GTK_WIDGET (osd));
+}
+
+gboolean 
+ol_osd_window_get_enhanced_mode (OlOsdWindow *osd)
+{
+  ol_assert_ret (OL_IS_OSD_WINDOW (osd), FALSE);
+  OlOsdWindowPrivate *priv = OL_OSD_WINDOW_GET_PRIVATE (osd);
+  return priv->enhanced_mode;
+}
+
+void 
+ol_osd_window_set_word_timings (OlOsdWindow *osd, gint line_id, GPtrArray *word_timings)
+{
+  ol_assert (OL_IS_OSD_WINDOW (osd));
+  OlOsdWindowPrivate *priv = OL_OSD_WINDOW_GET_PRIVATE (osd);
+  
+  if (word_timings) {
+    g_ptr_array_ref(word_timings);
+    g_hash_table_insert(priv->word_timings_cache, GINT_TO_POINTER(line_id), word_timings);
+  }
+}
+
+void 
+ol_osd_window_set_enhanced_word_color (OlOsdWindow *osd, OlColor color)
+{
+  ol_assert (OL_IS_OSD_WINDOW (osd));
+  OlOsdWindowPrivate *priv = OL_OSD_WINDOW_GET_PRIVATE (osd);
+  priv->enhanced_word_color = color;
+  gtk_widget_queue_draw (GTK_WIDGET (osd));
+}
+
+void 
+ol_osd_window_set_current_time (OlOsdWindow *osd, gint64 time_ms)
+{
+  ol_assert (OL_IS_OSD_WINDOW (osd));
+  OlOsdWindowPrivate *priv = OL_OSD_WINDOW_GET_PRIVATE (osd);
+  priv->current_time_ms = time_ms;
+  if (priv->enhanced_mode) {
+    gtk_widget_queue_draw (GTK_WIDGET (osd));
+  }
+}
+
+
 int
 ol_osd_window_get_width (OlOsdWindow *osd)
 {
@@ -1024,77 +1094,108 @@ ol_osd_window_paint_lyrics (OlOsdWindow *osd, cairo_t *cr)
   OlOsdWindowPrivate *priv = OL_OSD_WINDOW_GET_PRIVATE (osd);
   double alpha = 1.0;
   int font_height = ol_osd_render_get_font_height (osd->render_context);
+  
   if (priv->composited && priv->locked && priv->mouse_over_lyrics &&
       osd->translucent_on_mouse_over)
   {
     alpha = 0.3;
   }
-  if (!gtk_widget_get_realized (widget))
-    gtk_widget_realize (widget);
-  gint w, h;
-  int width, height;
-  ol_osd_window_get_osd_size (osd, &w, &h);
+  
   int line;
-  gdouble ypos, xpos;
-  ypos = ol_osd_window_compute_lyric_ypos (osd);
-  int start, end;
-  if (osd->line_count == 1)
+  for (line = 0; line < osd->line_count; line++)
   {
-    start = osd->current_line;
-    end = start + 1;
-  }
-  else
-  {
-    start = 0;
-    end = OL_OSD_WINDOW_MAX_LINE_COUNT;
-  }
-  cairo_save (cr);
-  cairo_rectangle (cr, BORDER_WIDTH, BORDER_WIDTH, w, h);
-  cairo_clip (cr);
-  cairo_set_operator (cr, CAIRO_OPERATOR_OVER);
-  for (line = start; line < end; line++)
-  {
-    double percentage = osd->percentage[line];
-    if (priv->active_lyric_surfaces[line] != NULL &&
-        priv->inactive_lyric_surfaces[line])
+    if (osd->lyrics[line] == NULL || strlen (osd->lyrics[line]) == 0)
+      continue;
+      
+    /* Enhanced LRC: Check if this line has word-level timing */
+    if (priv->enhanced_mode && line == osd->current_line)
     {
-      width = cairo_image_surface_get_width (priv->active_lyric_surfaces[line]);
-      height = cairo_image_surface_get_height (priv->active_lyric_surfaces[line]);
-      xpos = ol_osd_window_compute_lyric_xpos (osd, line, osd->percentage[line]);
-      xpos += BORDER_WIDTH;
-      cairo_pattern_t *text_mask = ol_osd_window_create_text_mask (osd,
-                                                                   cr,
-                                                                   line,
-                                                                   xpos,
-                                                                   alpha);
+      GPtrArray *word_timings = g_hash_table_lookup(priv->word_timings_cache, GINT_TO_POINTER(line));
+      if (word_timings && word_timings->len > 0) 
+      {
+        _paint_enhanced_line_with_words(osd, cr, line, word_timings, alpha);
+        continue; /* Skip standard painting for this line */
+      }
+    }
+    
+    /* Standard line painting */
+    double xpos = ol_osd_window_compute_lyric_xpos (osd, line, osd->percentage[line]);
+    double ypos = ol_osd_window_compute_lyric_ypos (osd) +
+                  font_height * line * (1 + LINE_PADDING);
+    
+    /* Paint inactive part */
+    if (priv->inactive_lyric_surfaces[line] != NULL)
+    {
       cairo_save (cr);
-      cairo_rectangle (cr, xpos, ypos, (double)width * percentage, height);
-      cairo_clip (cr);
-      cairo_set_source_surface (cr, priv->active_lyric_surfaces[line], xpos, ypos);
-      if (text_mask)
-        cairo_mask (cr, text_mask);
-      else
-        cairo_paint_with_alpha (cr, alpha);
-      cairo_restore (cr);
-      cairo_save (cr);
-      cairo_rectangle (cr,
-                       xpos + width * percentage,
-                       ypos,
-                       (double)width * (1.0 - percentage), height);
-      cairo_clip (cr);
       cairo_set_source_surface (cr, priv->inactive_lyric_surfaces[line], xpos, ypos);
-      if (text_mask)
-        cairo_mask (cr, text_mask);
-      else
-        cairo_paint_with_alpha (cr, alpha);
-      if (text_mask)
-        cairo_pattern_destroy (text_mask);
+      cairo_set_operator (cr, CAIRO_OPERATOR_OVER);
+      cairo_paint_with_alpha (cr, alpha);
       cairo_restore (cr);
     }
-    ypos += font_height * (1 + LINE_PADDING);
+    
+    /* Paint active part with percentage-based clipping */
+    if (priv->active_lyric_surfaces[line] != NULL && osd->percentage[line] > 0.0)
+    {
+      cairo_save (cr);
+      int surface_width = cairo_image_surface_get_width (priv->active_lyric_surfaces[line]);
+      double clip_width = surface_width * osd->percentage[line];
+      
+      cairo_rectangle (cr, xpos, ypos, clip_width, 
+                      cairo_image_surface_get_height (priv->active_lyric_surfaces[line]));
+      cairo_clip (cr);
+      
+      cairo_set_source_surface (cr, priv->active_lyric_surfaces[line], xpos, ypos);
+      cairo_set_operator (cr, CAIRO_OPERATOR_OVER);
+      cairo_paint_with_alpha (cr, alpha);
+      cairo_restore (cr);
+    }
+    
+    ol_osd_window_update_lyric_rect (osd, line);
   }
-  cairo_restore (cr);
 }
+
+/* New function for enhanced word-level painting */
+static void
+_paint_enhanced_line_with_words(OlOsdWindow *osd, cairo_t *cr, int line, 
+                               GPtrArray *word_timings, double alpha)
+{
+  OlOsdWindowPrivate *priv = OL_OSD_WINDOW_GET_PRIVATE (osd);
+  double xpos = ol_osd_window_compute_lyric_xpos (osd, line, osd->percentage[line]);
+  int font_height = ol_osd_render_get_font_height (osd->render_context);
+  double ypos = ol_osd_window_compute_lyric_ypos (osd) + 
+                font_height * line * (1 + LINE_PADDING);
+  
+  double current_x = xpos;
+  
+  /* Paint each word individually based on current time */
+  for (guint i = 0; i < word_timings->len; i++)
+  {
+    OlLrcWordTiming *word_timing = g_ptr_array_index(word_timings, i);
+    gboolean is_active = (priv->current_time_ms >= word_timing->timestamp_ms);
+    
+    /* Render word with appropriate color */
+    if (is_active)
+    {
+      ol_osd_render_set_linear_color (osd->render_context, 0, priv->enhanced_word_color);
+      ol_osd_render_set_linear_color (osd->render_context, 1, priv->enhanced_word_color);
+      ol_osd_render_set_linear_color (osd->render_context, 2, priv->enhanced_word_color);
+    }
+    else
+    {
+      ol_osd_render_set_linear_color (osd->render_context, 0, osd->inactive_colors[0]);
+      ol_osd_render_set_linear_color (osd->render_context, 1, osd->inactive_colors[1]);
+      ol_osd_render_set_linear_color (osd->render_context, 2, osd->inactive_colors[2]);
+    }
+    
+    ol_osd_render_paint_text (osd->render_context, cr, word_timing->word, current_x, ypos);
+    
+    /* Calculate next word position */
+    int word_width, word_height;
+    ol_osd_render_get_pixel_size (osd->render_context, word_timing->word, &word_width, &word_height);
+    current_x += word_width + 8; /* 8px spacing between words */
+  }
+}
+
 
 static cairo_pattern_t *
 ol_osd_window_create_text_mask (OlOsdWindow *osd,
@@ -1780,6 +1881,16 @@ ol_osd_window_init (OlOsdWindow *osd)
                       G_CALLBACK (ol_osd_window_realize_cb), osd);
     g_signal_connect (G_OBJECT (osd), "unrealize",
                       G_CALLBACK (ol_osd_window_unrealize_cb), osd);
+                      
+    /* Enhanced LRC initialization - ADD THIS */
+    
+    priv->enhanced_mode = FALSE;
+    priv->enhanced_word_color = (OlColor){1.0, 1.0, 0.0}; /* Yellow */
+    priv->word_timings_cache = g_hash_table_new_full(g_direct_hash, 
+                                                   g_direct_equal,
+                                                   NULL, 
+                                                   (GDestroyNotify)g_ptr_array_unref);
+    priv->current_time_ms = 0;                  
   }
 }
 
@@ -1855,6 +1966,14 @@ ol_osd_window_destroy (GtkObject *object)
     g_object_unref (osd->bg_pixbuf);
     osd->bg_pixbuf = NULL;
   }
+  //GTK_OBJECT_CLASS (ol_osd_window_parent_class)->destroy (object);
+  
+  if (priv->word_timings_cache != NULL)
+  {
+    g_hash_table_destroy (priv->word_timings_cache);
+    priv->word_timings_cache = NULL;
+  }
+
   GTK_OBJECT_CLASS (ol_osd_window_parent_class)->destroy (object);
 }
 

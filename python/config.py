@@ -124,6 +124,38 @@ class Config:
                     pass
                 return default
             raise e
+    def get_enhanced_lrc_enabled(self, default=True):
+        """Get whether enhanced LRC features are enabled"""
+        try:
+            return self.get_bool('EnhancedLRC/enabled', default)
+        except:
+            return default
+
+    def set_enhanced_lrc_enabled(self, enabled):
+        """Set enhanced LRC features enabled/disabled"""
+        self.set_bool('EnhancedLRC/enabled', enabled)
+
+    def get_enhanced_word_highlight_color(self, default='#FFFF00'):
+        """Get the color for highlighting current word in enhanced LRC"""
+        try:
+            return self.get_string('EnhancedLRC/word-highlight-color', default)
+        except:
+            return default
+
+    def set_enhanced_word_highlight_color(self, color):
+        """Set the word highlight color for enhanced LRC"""
+        self.set_string('EnhancedLRC/word-highlight-color', color)
+
+    def get_enhanced_animation_speed(self, default=1.0):
+        """Get animation speed for word-level transitions"""
+        try:
+            return self.get_double('EnhancedLRC/animation-speed', default)
+        except:
+            return default
+
+    def set_enhanced_animation_speed(self, speed):
+        """Set animation speed for enhanced LRC word transitions"""
+        self.set_double('EnhancedLRC/animation-speed', speed)        
 
     def set_string_list(self, key, value):
         self._proxy.SetStringList(key, value)
