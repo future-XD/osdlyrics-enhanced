@@ -1,3 +1,8 @@
+# ENHANCED BRANCH
+enhanced-beta branch has Enhanced LRC Support . Not that great implementation . I am just a beginner . 
+Report any bugs in this REPO . 
+Thanks 
+
 # OSD Lyrics
 
 Show synced lyrics with your favorite media player on Linux.
