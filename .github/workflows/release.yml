@@ -49,6 +49,7 @@ jobs:
             libpango1.0-dev \
             libcairo2-dev \
             libgdk-pixbuf2.0-dev
+          sudo apt-get install -y libdbus-glib-1-dev  
           sudo gem install --no-document fpm
 
       - name: Build application
@@ -119,6 +120,7 @@ jobs:
             pango \
             cairo \
             gdk-pixbuf2
+          pacman -S --noconfirm dbus-glib    
 
       - name: Checkout code
         uses: actions/checkout@v4
@@ -178,6 +180,7 @@ jobs:
             gdk-pixbuf2-devel \
             rpm-build \
             rpmdevtools
+          dnf -y install dbus-glib-devel   
 
       - name: Checkout code
         uses: actions/checkout@v4
@@ -238,6 +241,7 @@ jobs:
             wget \
             file \
             desktop-file-utils
+          sudo apt-get install -y libdbus-glib-1-dev  
 
       - name: Build application
         run: |
