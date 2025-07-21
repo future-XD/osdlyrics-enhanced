@@ -1,7 +1,6 @@
 name: Build & Release Enhanced OSD Lyrics
 
-env:
-  APP_NAME: osdlyrics-enhanced
+
   
 on:
   push:
