@@ -31,12 +31,12 @@ struct _OlLrcIter
   OlLrc *lrc;
 };
 
-struct OlLrcItem {
+/*struct OlLrcItem {
     int timestamp;
     char *text;
-    GPtrArray *word_timings;  /* Array of OlLrcWordTiming for enhanced LRC */
+    GPtrArray *word_timings;  // Array of OlLrcWordTiming for enhanced LRC 
     gboolean has_enhanced_timing;
-};
+}; */
 
 
 typedef struct _OlLrcPrivate OlLrcPrivate;
