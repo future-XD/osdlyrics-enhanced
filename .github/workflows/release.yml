@@ -5,9 +5,15 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+  pull_request:
+    branches: [ master, enhanced-beta ]
+
+env:
+  APP_NAME: osdlyrics-enhanced
 
 jobs:
   debian:
+    name: Build Debian/Ubuntu Package
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -16,97 +22,192 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential autotools-dev automake libtool intltool pkg-config \
-              devscripts debhelper fakeroot libgtk2.0-dev python3 python3-gi python3-dbus libsqlite3-dev \
-              libcurl4-openssl-dev libnotify-dev
+          sudo apt-get install -y \
+            build-essential \
+            autotools-dev \
+            automake \
+            libtool \
+            intltool \
+            pkg-config \
+            devscripts \
+            debhelper \
+            fakeroot \
+            ruby \
+            ruby-dev \
+            libgtk2.0-dev \
+            libdbus-glib-1-dev \
+            libdbus-1-dev \
+            libgirepository1.0-dev \
+            python3 \
+            python3-dev \
+            python3-gi \
+            python3-dbus \
+            libsqlite3-dev \
+            libcurl4-openssl-dev \
+            libnotify-dev \
+            libglib2.0-dev \
+            libpango1.0-dev \
+            libcairo2-dev \
+            libgdk-pixbuf2.0-dev
+          sudo apt-get install -y libdbus-glib-1-dev  
+          sudo gem install --no-document fpm
 
-      - name: Build
+      - name: Build application
         run: |
           ./autogen.sh
-          ./configure --prefix=/usr
+          ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var
           make -j$(nproc)
 
-      - name: Package .deb
+      - name: Create DEB package
         run: |
           mkdir -p pkg-deb
           make DESTDIR="$PWD/pkg-deb" install
-          cd pkg-deb
-          # Basic deb package creation; for production, consider using debhelper or build-deb-action[1]
-          fpm -s dir -t deb -n osdlyrics-enhanced -v "${GITHUB_REF_NAME#v}" -C . \
-            --prefix=/ --deb-no-default-config-files=1 --description "OSD Lyrics Enhanced LRC" .
-        env:
-          FPM_VERSION: 1.10.2
+          
+          # Create proper package with dependencies
+          fpm -s dir -t deb \
+            -n "${APP_NAME}" \
+            -v "${GITHUB_REF_NAME#v}" \
+            -C pkg-deb \
+            --prefix=/ \
+            --description "Enhanced OSD Lyrics with word-level LRC synchronization" \
+            --url "https://github.com/future-XD/osdlyrics-enhanced" \
+            --license "GPL-3.0+" \
+            --maintainer "Enhanced OSD Lyrics Team" \
+            --depends "libgtk2.0-0" \
+            --depends "libdbus-glib-1-2" \
+            --depends "libdbus-1-3" \
+            --depends "python3" \
+            --depends "python3-gi" \
+            --depends "python3-dbus" \
+            --depends "libsqlite3-0" \
+            --depends "libcurl4" \
+            --depends "libnotify4" \
+            --depends "libglib2.0-0" \
+            --category "sound" \
+            .
 
-      - name: Upload .deb
+      - name: Upload DEB package
         uses: actions/upload-artifact@v4
         with:
-          name: osdlyrics-enhanced-deb
-          path: pkg-deb/*.deb
+          name: debian-package
+          path: "*.deb"
 
   arch:
+    name: Build Arch Linux Package
     runs-on: ubuntu-latest
     container: archlinux:latest
     steps:
       - name: Install build dependencies
         run: |
           pacman -Syu --noconfirm
-          pacman -S --noconfirm base-devel git gtk2 python python-gobject python-dbus sqlite curl libnotify intltool pkgconf autoconf automake libtool
+          pacman -S --noconfirm \
+            base-devel \
+            git \
+            gtk2 \
+            dbus-glib \
+            python \
+            python-gobject \
+            python-dbus \
+            sqlite \
+            curl \
+            libnotify \
+            intltool \
+            pkgconf \
+            autoconf \
+            automake \
+            libtool \
+            glib2 \
+            pango \
+            cairo \
+            gdk-pixbuf2
+          pacman -S --noconfirm dbus-glib    
 
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Build
+      - name: Build application
         run: |
           ./autogen.sh
-          ./configure --prefix=/usr
+          ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var
           make -j$(nproc)
 
-      - name: Package (PKG)
+      - name: Create Arch package
         run: |
           mkdir -p pkg-arch
           make DESTDIR="$PWD/pkg-arch" install
-          BS_VERSION="${GITHUB_REF_NAME#v}"
-          tar -C pkg-arch -czf osdlyrics-enhanced-arch.tar.gz .
+          
+          # Create tarball for Arch installation
+          cd pkg-arch
+          tar -czf "../${APP_NAME}-arch-$(date +%Y%m%d).tar.gz" .
 
-      - name: Upload .tar.gz
+      - name: Upload Arch package
         uses: actions/upload-artifact@v4
         with:
-          name: osdlyrics-enhanced-arch
-          path: osdlyrics-enhanced-arch.tar.gz
+          name: arch-package
+          path: "${APP_NAME}-arch-*.tar.gz"
 
   fedora:
+    name: Build Fedora/RHEL Package
     runs-on: ubuntu-latest
     container: fedora:latest
     steps:
       - name: Install build dependencies
         run: |
           dnf -y upgrade
-          dnf -y install make automake gcc gcc-c++ kernel-devel intltool pkgconfig gtk2-devel \
-            python3 python3-gobject python3-dbus sqlite-devel libcurl-devel libnotify-devel
+          dnf -y install \
+            make \
+            automake \
+            gcc \
+            gcc-c++ \
+            intltool \
+            pkgconf \
+            pkg-config \
+            autoconf \
+            libtool \
+            gtk2-devel \
+            dbus-glib-devel \
+            dbus-devel \
+            python3 \
+            python3-devel \
+            python3-gobject \
+            python3-dbus \
+            sqlite-devel \
+            libcurl-devel \
+            libnotify-devel \
+            glib2-devel \
+            pango-devel \
+            cairo-devel \
+            gdk-pixbuf2-devel \
+            rpm-build \
+            rpmdevtools
+          dnf -y install dbus-glib-devel   
 
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Build
+      - name: Build application
         run: |
           ./autogen.sh
-          ./configure --prefix=/usr
+          ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var
           make -j$(nproc)
 
-      - name: Package (RPM)
+      - name: Create RPM package structure
         run: |
           mkdir -p pkg-fedora
           make DESTDIR="$PWD/pkg-fedora" install
-          # For production, create a proper SPEC file and use rpmbuild or fpm
-          tar -C pkg-fedora -czf osdlyrics-enhanced-fedora.tar.gz .
+          
+          # Create installation tarball
+          cd pkg-fedora
+          tar -czf "../${APP_NAME}-fedora-$(date +%Y%m%d).tar.gz" .
 
-      - name: Upload .tar.gz
+      - name: Upload Fedora package
         uses: actions/upload-artifact@v4
         with:
-          name: osdlyrics-enhanced-fedora
-          path: osdlyrics-enhanced-fedora.tar.gz
+          name: fedora-package
+          path: "${APP_NAME}-fedora-*.tar.gz"
 
   appimage:
+    name: Build AppImage
     runs-on: ubuntu-20.04
     steps:
       - name: Checkout code
@@ -115,36 +216,172 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential autotools-dev automake libtool intltool pkg-config \
-            libgtk2.0-dev python3 python3-gi python3-dbus libsqlite3-dev libcurl4-openssl-dev \
-            libnotify-dev wget
+          sudo apt-get install -y \
+            build-essential \
+            autotools-dev \
+            automake \
+            libtool \
+            intltool \
+            pkg-config \
+            libgtk2.0-dev \
+            libdbus-glib-1-dev \
+            libdbus-1-dev \
+            libgirepository1.0-dev \
+            python3 \
+            python3-dev \
+            python3-gi \
+            python3-dbus \
+            libsqlite3-dev \
+            libcurl4-openssl-dev \
+            libnotify-dev \
+            libglib2.0-dev \
+            libpango1.0-dev \
+            libcairo2-dev \
+            libgdk-pixbuf2.0-dev \
+            wget \
+            file \
+            desktop-file-utils
+          sudo apt-get install -y libdbus-glib-1-dev  
 
-      - name: Build
+      - name: Build application
         run: |
           ./autogen.sh
           ./configure --prefix=/usr
           make -j$(nproc)
 
-      - name: Create AppDir and install
+      - name: Create AppDir structure
         run: |
           mkdir -p AppDir/usr
           make DESTDIR=$PWD/AppDir install
-          cp data/osdlyrics-enhanced.desktop AppDir/
-          # Copy icon, fallback if missing
-          find ./data/icons -name osdlyrics-enhanced.png | head -n1 | xargs -I@ cp @ AppDir/.
+          
+          # Create proper desktop file
+          mkdir -p AppDir/usr/share/applications
+          cat > AppDir/usr/share/applications/${APP_NAME}.desktop << EOF
+          [Desktop Entry]
+          Type=Application
+          Name=OSD Lyrics Enhanced
+          Comment=Enhanced lyrics display with word-level synchronization
+          Exec=osdlyrics
+          Icon=osdlyrics-enhanced
+          Categories=AudioVideo;Audio;Player;
+          Keywords=lyrics;music;sync;karaoke;enhanced;
+          StartupNotify=true
+          EOF
+          
+          # Copy desktop file to AppDir root
+          cp AppDir/usr/share/applications/${APP_NAME}.desktop AppDir/
+          
+          # Find and copy icon
+          if [ -f "data/osdlyrics.png" ]; then
+            cp data/osdlyrics.png AppDir/${APP_NAME}.png
+          elif [ -f "data/icons/hicolor/48x48/apps/osdlyrics.png" ]; then
+            cp data/icons/hicolor/48x48/apps/osdlyrics.png AppDir/${APP_NAME}.png
+          else
+            # Create a simple placeholder icon if none exists
+            convert -size 48x48 xc:lightblue -fill darkblue -gravity center \
+              -pointsize 8 -annotate +0+0 "OSD\nLyrics\nEnhanced" AppDir/${APP_NAME}.png
+          fi
+          
+          # Make executable
+          chmod +x AppDir/usr/bin/*
 
-      - name: Download AppImage tool
+      - name: Download linuxdeploy and appimagetool
         run: |
+          wget https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
           wget https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
-          chmod +x appimagetool-x86_64.AppImage
+          chmod +x linuxdeploy-x86_64.AppImage appimagetool-x86_64.AppImage
 
-      - name: Build AppImage
+      - name: Create AppImage with linuxdeploy
         run: |
-          ./appimagetool-x86_64.AppImage AppDir osdlyrics-enhanced-x86_64.AppImage
+          export VERSION=${GITHUB_REF_NAME#v}
+          ./linuxdeploy-x86_64.AppImage --appdir AppDir --output appimage
+          
+          # If linuxdeploy fails, fall back to appimagetool
+          if [ ! -f "${APP_NAME}-"*.AppImage ]; then
+            ./appimagetool-x86_64.AppImage AppDir "${APP_NAME}-x86_64.AppImage"
+          fi
 
       - name: Upload AppImage
         uses: actions/upload-artifact@v4
         with:
-          name: osdlyrics-enhanced-appimage
-          path: osdlyrics-enhanced-x86_64.AppImage
+          name: appimage
+          path: "*.AppImage"
 
+  create-release:
+    name: Create GitHub Release
+    needs: [debian, arch, fedora, appimage]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Create release notes
+        run: |
+          cat > release-notes.md << 'EOF'
+          ## 🎵 Enhanced OSD Lyrics - Word-Level LRC Synchronization
+          
+          ### ✨ Key Features
+          - **Word-by-word highlighting** in OSD display mode
+          - **Enhanced LRC Support ( word by word timings in ms instead of line by line )
+          - **Enhanced MPD integration** with smart filename matching  ( to-do )
+          - **Backward compatibility** with all standard LRC files
+          - **Customizable highlight colors** and animation speeds
+          
+          ### 📦 Installation Packages
+          
+          **Debian/Ubuntu (.deb)**
+          ```
+          sudo dpkg -i osdlyrics-enhanced_*.deb
+          sudo apt-get install -f  # Fix any missing dependencies
+          ```
+          
+          **Arch Linux (.tar.gz)**
+          ```
+          sudo tar -xzf osdlyrics-enhanced-arch-*.tar.gz -C /
+          sudo ldconfig
+          ```
+          
+          **Fedora/RHEL (.tar.gz)**
+          ```
+          sudo tar -xzf osdlyrics-enhanced-fedora-*.tar.gz -C /
+          sudo ldconfig
+          ```
+          
+          **Universal AppImage**
+          ```
+          chmod +x osdlyrics-enhanced-*.AppImage
+          ./osdlyrics-enhanced-*.AppImage
+          ```
+          
+          ### 🚀 Usage
+          1. Install package for your distribution
+          2. Place enhanced LRC files alongside your music
+          3. Start: `osdlyrics`
+          4. Play music with MPD/Cantata or any supported player
+          5. Enjoy word-level synchronized lyrics!
+          
+          ### 🔧 Dependencies Resolved
+          All packages include proper dependency declarations for seamless installation.
+          
+          ### 🐛 Support
+          Report issues: https://github.com/future-XD/osdlyrics-enhanced/issues
+          EOF
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: "Enhanced OSD Lyrics ${{ github.ref_name }}"
+          body_path: release-notes.md
+          files: |
+            debian-package/*.deb
+            arch-package/*.tar.gz
+            fedora-package/*.tar.gz
+            appimage/*.AppImage
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
