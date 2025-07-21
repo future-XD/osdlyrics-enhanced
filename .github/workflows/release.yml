@@ -92,7 +92,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: debian-package
-          path: ${{ env.APP_NAME }}-deb-${{ github.ref_name[1:] }}.deb
+          path: ${{ env.APP_NAME }}-deb-${{ github.ref_name }}.deb
 
 
   arch:
@@ -147,7 +147,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: arch-package
-          path: "${APP_NAME}-arch-*.tar.gz"
+          path: "${APP_NAME}-${github.ref_name}-arch-*.tar.gz"
 
   fedora:
     name: Build Fedora/RHEL Package
@@ -207,7 +207,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: fedora-package
-          path: "${APP_NAME}-fedora-*.tar.gz"
+          path: "${APP_NAME}-${github.ref_name}-fedora-*.tar.gz"
 
   appimage:
     name: Build AppImage
