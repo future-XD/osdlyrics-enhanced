@@ -147,8 +147,8 @@ jobs:
       - name: Upload Arch package
         uses: actions/upload-artifact@v4
         with:
-          name: arch-package
-          path: "${APP_NAME}-arch-$(date +%Y%m%d)-${github.ref_name}.tar.gz"
+          name: osdlyrics-enhanced-beta-arch
+          path: "*.tar.gz"
 
   fedora:
     name: Build Fedora/RHEL Package
@@ -207,111 +207,9 @@ jobs:
       - name: Upload Fedora package
         uses: actions/upload-artifact@v4
         with:
-          name: fedora-package
-          path: "${APP_NAME}-fedora-$(date +%Y%m%d)-${github.ref_name}-.tar.gz"
+          name: osdlyrics-enhanced-beta-fedora
+          path: "*.tar.gz"
 
-  appimage:
-    name: Build AppImage
-    runs-on: ubuntu-20.04
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            autotools-dev \
-            automake \
-            libtool \
-            intltool \
-            pkg-config \
-            libgtk2.0-dev \
-            libdbus-glib-1-dev \
-            libdbus-1-dev \
-            libgirepository1.0-dev \
-            python3 \
-            python3-dev \
-            python3-gi \
-            python3-dbus \
-            libsqlite3-dev \
-            libcurl4-openssl-dev \
-            libnotify-dev \
-            libglib2.0-dev \
-            libpango1.0-dev \
-            libcairo2-dev \
-            libgdk-pixbuf2.0-dev \
-            wget \
-            file \
-            desktop-file-utils
-          sudo apt-get install -y libdbus-glib-1-dev  
-
-      - name: Build application
-        run: |
-          ./autogen.sh
-          ./configure --prefix=/usr
-          make -j$(nproc)
-
-      - name: Create AppDir structure
-        run: |
-          mkdir -p AppDir/usr
-          make DESTDIR=$PWD/AppDir install
-          
-          # Create proper desktop file
-          mkdir -p AppDir/usr/share/applications
-          cat > AppDir/usr/share/applications/${APP_NAME}.desktop << EOF
-          [Desktop Entry]
-          Type=Application
-          Name=OSD Lyrics Enhanced
-          Comment=Enhanced lyrics display with word-level synchronization
-          Exec=osdlyrics
-          Icon=osdlyrics-enhanced
-          Categories=AudioVideo;Audio;Player;
-          Keywords=lyrics;music;sync;karaoke;enhanced;
-          StartupNotify=true
-          EOF
-          
-          # Copy desktop file to AppDir root
-          cp AppDir/usr/share/applications/${APP_NAME}.desktop AppDir/
-          
-          # Find and copy icon
-          if [ -f "data/osdlyrics.png" ]; then
-            cp data/osdlyrics.png AppDir/${APP_NAME}.png
-          elif [ -f "data/icons/hicolor/48x48/apps/osdlyrics.png" ]; then
-            cp data/icons/hicolor/48x48/apps/osdlyrics.png AppDir/${APP_NAME}.png
-          else
-            # Create a simple placeholder icon if none exists
-            convert -size 48x48 xc:lightblue -fill darkblue -gravity center \
-              -pointsize 8 -annotate +0+0 "OSD\nLyrics\nEnhanced" AppDir/${APP_NAME}.png
-          fi
-          
-          # Make executable
-          chmod +x AppDir/usr/bin/*
-
-      - name: Download linuxdeploy and appimagetool
-        run: |
-          wget https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
-          wget https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
-          chmod +x linuxdeploy-x86_64.AppImage appimagetool-x86_64.AppImage
-
-      - name: Create AppImage with linuxdeploy
-        run: |
-          export VERSION=${GITHUB_REF_NAME#v}
-          ./linuxdeploy-x86_64.AppImage --appdir AppDir --output appimage
-          
-          # If linuxdeploy fails, fall back to appimagetool
-          if [ ! -f "${APP_NAME}-"*.AppImage ]; then
-            ./appimagetool-x86_64.AppImage AppDir "$APP_NAME-x86_64-$github.ref_name-.AppImage"
-          fi
-
-      - name: Upload AppImage
-        uses: actions/upload-artifact@v4
-        with:
-          name: appimage
-          path: "${APP_NAME}-x86_64-${{ github.ref_name }}-.AppImage"
-
-          #path: "*.AppImage"
 
   create-release:
     name: Create GitHub Release
