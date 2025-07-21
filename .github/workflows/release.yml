@@ -308,7 +308,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: appimage
-          path: ${{ env.APP_NAME }}--${{ github.ref_name[1:] }}.AppImage
+          path: ${{ env.APP_NAME }}--${{ github.ref_name }}.AppImage
 
           #path: "*.AppImage"
 
