@@ -91,7 +91,7 @@ jobs:
       - name: Upload DEB package
         uses: actions/upload-artifact@v4
         with:
-          name: osdlyrics-enhanced-beta.deb
+          name: debian-package
           path: "*.deb"
           #path: ${{ env.APP_NAME }}-${{ github.ref_name }}*.deb
 
@@ -147,7 +147,7 @@ jobs:
       - name: Upload Arch package
         uses: actions/upload-artifact@v4
         with:
-          name: osdlyrics-enhanced-beta-arch
+          name: arch-package
           path: "*.tar.gz"
 
   fedora:
@@ -207,7 +207,7 @@ jobs:
       - name: Upload Fedora package
         uses: actions/upload-artifact@v4
         with:
-          name: osdlyrics-enhanced-beta-fedora
+          name: fedora-package
           path: "*.tar.gz"
 
 
@@ -245,21 +245,17 @@ jobs:
           
           **Arch Linux (.tar.gz)**
           ```
-          sudo tar -xzf osdlyrics-enhanced-arch-*.tar.gz -C /
+          sudo tar -xzf osdlyrics-enhanced-*.tar.gz -C /
           sudo ldconfig
           ```
           
           **Fedora/RHEL (.tar.gz)**
           ```
-          sudo tar -xzf osdlyrics-enhanced-fedora-*.tar.gz -C /
+          sudo tar -xzf osdlyrics-enhanced-*.tar.gz -C /
           sudo ldconfig
           ```
           
-          **Universal AppImage**
-          ```
-          chmod +x osdlyrics-enhanced-*.AppImage
-          ./osdlyrics-enhanced-*.AppImage
-          ```
+         
           
           ### 🚀 Usage
           1. Install package for your distribution
